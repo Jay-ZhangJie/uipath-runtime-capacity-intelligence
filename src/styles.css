@@ -337,6 +337,15 @@ main {
   align-items: start;
 }
 
+.heatmap-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
 .inline-filter {
   display: inline-grid;
   gap: 5px;
@@ -354,21 +363,18 @@ main {
   font-size: 12px;
 }
 
-.heatmap {
+.hourly-heatmap-wrap {
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.hourly-heatmap {
   display: grid;
-  grid-template-columns: 72px repeat(12, minmax(44px, 1fr));
+  grid-template-columns: 122px repeat(24, minmax(44px, 1fr));
   gap: 4px;
   align-items: stretch;
-  overflow-x: auto;
-}
-
-.heatmap-day {
-  grid-template-columns: 72px repeat(24, minmax(42px, 1fr));
-}
-
-.heatmap-month {
-  grid-template-columns: 92px minmax(96px, 160px);
-  width: min(100%, 300px);
+  min-width: 1220px;
 }
 
 .heatmap-row {
@@ -397,10 +403,22 @@ main {
 .heatmap-cell {
   border: 2px solid transparent;
   font-weight: 700;
+  padding: 0 3px;
 }
 
 .heatmap-row-button {
   cursor: pointer;
+  justify-content: flex-start;
+  padding: 0 8px;
+  text-align: left;
+}
+
+.date-label {
+  min-width: 122px;
+}
+
+.hour-label {
+  font-variant-numeric: tabular-nums;
 }
 
 .heatmap-row-button:hover,
@@ -416,6 +434,78 @@ main {
 
 .heatmap-empty {
   background: #f3f5f8;
+}
+
+.month-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.calendar-weekday {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  background: #eef2f7;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.month-day {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-height: 104px;
+  padding: 10px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.month-day span,
+.month-day small,
+.month-day em {
+  font-size: 12px;
+}
+
+.month-day span {
+  color: currentColor;
+  opacity: 0.8;
+}
+
+.month-day strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.month-day small,
+.month-day em {
+  font-style: normal;
+  font-weight: 700;
+}
+
+.month-day.selected {
+  border-color: #0b5cad;
+  box-shadow: 0 0 0 2px #d7ebff;
+}
+
+.month-day.blank {
+  border: 1px dashed var(--line);
+  background: #f6f8fb;
+  cursor: default;
+}
+
+.month-day.no-signal {
+  color: var(--muted);
+  background: #f3f5f8;
+}
+
+.month-day:not(.blank):hover {
+  outline: 2px solid #91c8ff;
+  outline-offset: 1px;
 }
 
 .tone-low {
