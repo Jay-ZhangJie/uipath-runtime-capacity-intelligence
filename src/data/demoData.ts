@@ -50,6 +50,12 @@ export const runtimeBuckets: RuntimeBucket[] = dayRows.flatMap(([day, ...values]
   values.map((value, index) => ({
     day,
     hour: hours[index],
+    machineTemplateId:
+      day === 'Tue' || day === 'Fri'
+        ? 'mt-prod-windows'
+        : day === 'Thu'
+          ? 'mt-backoffice-highdensity'
+          : 'mt-monthend-burst',
     observedDemand: Math.round((value / 100) * 18),
     projectedDemand: Math.round((value / 100) * 18),
     capacity: 18,
