@@ -7,7 +7,8 @@ export type DateRange = 'last-day' | 'last-week' | 'last-month' | 'last-quarter'
 export type RiskView = 'folder' | 'process' | 'job' | 'sla';
 
 export interface RuntimeBucket {
-  day: string;
+  date: string;
+  weekday: string;
   hour: string;
   machineTemplateId: string;
   observedDemand: number;
@@ -56,7 +57,7 @@ export interface WhatIfScenario {
   solutionName: string;
   folder: string;
   machineTemplateId: string;
-  preferredDay: string;
+  preferredDate: string;
   preferredHour: string;
   runtimeDemand: number;
   durationMinutes: number;
