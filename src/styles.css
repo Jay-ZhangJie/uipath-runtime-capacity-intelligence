@@ -363,26 +363,7 @@ main {
   font-size: 12px;
 }
 
-.hourly-heatmap-wrap {
-  width: 100%;
-  overflow-x: auto;
-  padding-bottom: 4px;
-}
-
-.hourly-heatmap {
-  display: grid;
-  grid-template-columns: 122px repeat(24, minmax(44px, 1fr));
-  gap: 4px;
-  align-items: stretch;
-  min-width: 1220px;
-}
-
-.heatmap-row {
-  display: contents;
-}
-
 .heatmap-label,
-.heatmap-cell,
 .heatmap-empty {
   min-height: 34px;
   border-radius: 7px;
@@ -400,34 +381,143 @@ main {
   border: 0;
 }
 
-.heatmap-cell {
+.day-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.day-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.day-title strong {
+  font-size: 15px;
+}
+
+.day-title span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.day-period-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.day-period {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.period-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.period-hours {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.hour-card {
+  display: grid;
+  gap: 3px;
+  min-height: 64px;
+  padding: 7px 5px;
   border: 2px solid transparent;
-  font-weight: 700;
-  padding: 0 3px;
+  border-radius: 7px;
+  text-align: center;
+  overflow: hidden;
 }
 
-.heatmap-row-button {
-  cursor: pointer;
-  justify-content: flex-start;
-  padding: 0 8px;
+.hour-card span,
+.hour-card small {
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.hour-card strong {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.hour-card small {
+  font-weight: 800;
+  opacity: 0.78;
+}
+
+.week-capacity {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.week-day-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 156px;
+  padding: 11px;
+  border: 2px solid transparent;
+  border-radius: 8px;
   text-align: left;
+  overflow: hidden;
 }
 
-.date-label {
-  min-width: 122px;
+.week-day-card span,
+.week-day-card small {
+  font-size: 12px;
 }
 
-.hour-label {
-  font-variant-numeric: tabular-nums;
+.week-day-card strong {
+  font-size: 15px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
-.heatmap-row-button:hover,
-.heatmap-cell:hover {
+.week-meter {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(22, 32, 45, 0.14);
+}
+
+.week-meter i {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  border-radius: inherit;
+  background: currentColor;
+}
+
+.week-day-card small {
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.hour-card:hover,
+.week-day-card:hover {
   outline: 2px solid #91c8ff;
   outline-offset: 1px;
 }
 
-.heatmap-cell.selected {
+.hour-card.selected,
+.week-day-card.selected {
   border-color: #0b5cad;
   box-shadow: 0 0 0 2px #d7ebff;
 }
@@ -703,15 +793,27 @@ dd {
   gap: 10px;
 }
 
+.form-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
 @media (max-width: 1120px) {
   .filters-panel,
   .kpi-grid,
   .workspace-grid,
   .inventory-summary,
   .heatmap-planner-grid,
+  .day-period-grid,
   .recommendation-grid,
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .week-capacity,
+  .month-calendar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .topbar {
@@ -732,5 +834,20 @@ dd {
   th,
   td {
     padding: 10px 8px;
+  }
+
+  .period-hours {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .week-capacity,
+  .month-calendar,
+  .form-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .day-title {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
