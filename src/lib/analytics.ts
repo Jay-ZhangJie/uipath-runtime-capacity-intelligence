@@ -23,6 +23,11 @@ export function peakDemand(buckets: RuntimeBucket[]) {
   return buckets.reduce((peak, bucket) => Math.max(peak, bucket.projectedDemand), 0);
 }
 
+export function filterBucketsByTemplate(buckets: RuntimeBucket[], machineTemplateId: string) {
+  if (machineTemplateId === 'all') return buckets;
+  return buckets.filter((bucket) => bucket.machineTemplateId === machineTemplateId);
+}
+
 export function filterRisks(risks: ScheduleRisk[], folder: string) {
   if (folder === 'All permitted folders') return risks;
   return risks.filter((risk) => risk.folder === folder);
