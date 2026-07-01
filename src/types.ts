@@ -1,12 +1,15 @@
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
-export type TimeGrain = 'day' | 'week' | 'month' | 'year';
+export type TimeGrain = 'day' | 'week' | 'month';
+
+export type DateRange = 'last-day' | 'last-week' | 'last-month' | 'last-quarter';
 
 export type RiskView = 'folder' | 'process' | 'job' | 'sla';
 
 export interface RuntimeBucket {
   day: string;
   hour: string;
+  machineTemplateId: string;
   observedDemand: number;
   projectedDemand: number;
   capacity: number;
@@ -47,4 +50,15 @@ export interface Recommendation {
   impact: string;
   confidence: 'Low' | 'Medium' | 'High';
   basis: string;
+}
+
+export interface WhatIfScenario {
+  solutionName: string;
+  folder: string;
+  machineTemplateId: string;
+  preferredDay: string;
+  preferredHour: string;
+  runtimeDemand: number;
+  durationMinutes: number;
+  priority: 'Normal' | 'High' | 'Critical';
 }
