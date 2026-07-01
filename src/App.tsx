@@ -1,12 +1,15 @@
 import {
+  AlertCircle,
   AlertTriangle,
   BarChart3,
   CalendarClock,
   CheckCircle2,
   Clock3,
   Cpu,
+  Info,
   LogIn,
   LogOut,
+  RefreshCw,
   Server,
   ShieldCheck,
   Sparkles,
@@ -38,6 +41,15 @@ import { buildRecommendations } from './lib/recommendations';
 import type { DateRange, Recommendation, RiskLevel, RiskView, RuntimeBucket, TimeGrain, WhatIfScenario } from './types';
 
 type SelectedTile = { date: string; hour: string };
+type DataSignalTone = 'ok' | 'info' | 'warning' | 'error';
+
+type DataSignal = {
+  id: string;
+  tone: DataSignalTone;
+  title: string;
+  detail: string;
+  timestamp?: string;
+};
 
 const grains: TimeGrain[] = ['day', 'week', 'month'];
 const riskViews: RiskView[] = ['folder', 'process', 'job', 'sla'];
@@ -56,6 +68,8 @@ const dayPeriods = [
   { label: '12:00-17:59', hours: hours24.slice(12, 18) },
   { label: '18:00-23:59', hours: hours24.slice(18, 24) },
 ];
+const demoLastAttemptedPull = '2026-07-01 08:35 ET';
+const demoLastSuccessfulPull = '2026-07-01 08:30 ET';
 
 const defaultScenario: WhatIfScenario = {
   solutionName: 'New Finance Automation',
@@ -170,6 +184,13 @@ function utilizationSummaryForDate(date: string, buckets: RuntimeBucket[]) {
   };
 }
 
+function dataSignalIcon(tone: DataSignalTone) {
+  if (tone === 'ok') return <CheckCircle2 size={17} />;
+  if (tone === 'warning') return <AlertTriangle size={17} />;
+  if (tone === 'error') return <AlertCircle size={17} />;
+  return <Info size={17} />;
+}
+
 export function App() {
   const [signedIn, setSignedIn] = useState(true);
   const [tenant, setTenant] = useState(tenants[0]);
@@ -222,6 +243,37 @@ export function App() {
   const riskWindows = projectedRangeBuckets.filter((bucket) => utilizationPercent(bucket) >= 85).length;
   const folderRiskRows = groupRiskByFolder(visibleRisks);
   const selectedBucket = selectedTile ? bucketFor(selectedTile.date, selectedTile.hour, heatmapBuckets) : null;
+  const dataSignals: DataSignal[] = signedIn
+    ? [
+        {
+          id: 'demo-mode',
+          tone: 'warning',
+          title: 'Mock data active',
+          detail: 'Live Orchestrator data is not connected yet. KPIs, heatmap, inventory, and risks are fixture-backed.',
+          timestamp: demoLastSuccessfulPull,
+        },
+        {
+          id: 'api-not-wired',
+          tone: 'error',
+          title: 'Live API connector not configured',
+          detail: 'Future API failures such as 401, 403, 429, timeout, or partial folder access should surface here before users trust the numbers.',
+          timestamp: demoLastAttemptedPull,
+        },
+        {
+          id: 'demo-loaded',
+          tone: 'ok',
+          title: 'Demo dataset loaded',
+          detail: `${runtimeBuckets.length} hourly runtime buckets and ${scheduleRisks.length} schedule risk records are available for the mock experience.`,
+        },
+      ]
+    : [
+        {
+          id: 'auth-required',
+          tone: 'error',
+          title: 'Sign-in required',
+          detail: 'Connect to the target tenant before loading permitted folders, schedules, jobs, machine templates, and license utilization.',
+        },
+      ];
 
   function selectTile(tile: SelectedTile, nextGrain?: TimeGrain) {
     setSelectedTile(tile);
@@ -313,6 +365,8 @@ export function App() {
             Filters are permission-scoped. Future impact is shown only through the what-if scenario overlay.
           </div>
         </section>
+
+        <DataStatusBand signals={dataSignals} />
 
         <section className="kpi-grid" aria-label="Capacity summary">
           <MetricCard label="Configured Runtimes" value={configuredRuntimes} detail="Across machine templates" icon={<Cpu />} />
@@ -574,6 +628,41 @@ function PanelHeader({ icon, title, subtitle }: { icon: React.ReactNode; title: 
       </div>
       <p>{subtitle}</p>
     </div>
+  );
+}
+
+function DataStatusBand({ signals }: { signals: DataSignal[] }) {
+  const errorCount = signals.filter((signal) => signal.tone === 'error').length;
+  const warningCount = signals.filter((signal) => signal.tone === 'warning').length;
+
+  return (
+    <section className="data-status-band" aria-label="Data connection and API status">
+      <div className="data-status-summary">
+        <div>
+          <span>Data Health</span>
+          <strong>{errorCount ? `${errorCount} issue${errorCount > 1 ? 's' : ''} visible` : 'No blocking errors'}</strong>
+          <small>{warningCount ? `${warningCount} warning${warningCount > 1 ? 's' : ''}` : 'No warnings'} - read-only monitoring</small>
+        </div>
+        <div className="refresh-status">
+          <RefreshCw size={16} />
+          Last checked {demoLastAttemptedPull}
+        </div>
+      </div>
+      <div className="data-signal-grid">
+        {signals.map((signal) => (
+          <article className={`data-signal signal-${signal.tone}`} key={signal.id}>
+            <div className="signal-icon">{dataSignalIcon(signal.tone)}</div>
+            <div>
+              <div className="signal-title">
+                <strong>{signal.title}</strong>
+                {signal.timestamp ? <span>{signal.timestamp}</span> : null}
+              </div>
+              <p>{signal.detail}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
