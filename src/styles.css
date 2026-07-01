@@ -32,7 +32,8 @@ body {
 }
 
 button,
-select {
+select,
+input {
   font: inherit;
 }
 
@@ -153,6 +154,14 @@ td {
   background: #f8fafc;
 }
 
+.button.primary {
+  justify-content: center;
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+  font-weight: 800;
+}
+
 main {
   width: min(1480px, calc(100% - 40px));
   margin: 20px auto 42px;
@@ -160,7 +169,7 @@ main {
 
 .filters-panel {
   display: grid;
-  grid-template-columns: repeat(4, minmax(160px, 1fr)) 1.25fr;
+  grid-template-columns: repeat(4, minmax(150px, 1fr)) 1.25fr;
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -188,7 +197,10 @@ main {
   font-size: 12px;
 }
 
-.filters-panel select {
+.filters-panel select,
+.inline-filter select,
+.what-if-panel select,
+.what-if-panel input {
   width: 100%;
   min-height: 30px;
   border: 0;
@@ -196,6 +208,15 @@ main {
   color: var(--ink);
   font-weight: 700;
   min-width: 0;
+}
+
+.what-if-panel select,
+.what-if-panel input {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 10px;
 }
 
 .access-note {
@@ -253,6 +274,10 @@ main {
   align-items: start;
 }
 
+.workspace-grid.single-column {
+  grid-template-columns: 1fr;
+}
+
 .main-column,
 .side-column {
   display: grid;
@@ -305,6 +330,30 @@ main {
   color: #104c7f;
 }
 
+.heatmap-planner-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+}
+
+.inline-filter {
+  display: inline-grid;
+  gap: 5px;
+  min-width: 160px;
+  margin-bottom: 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.inline-filter span,
+.what-if-panel span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .heatmap {
   display: grid;
   grid-template-columns: 72px repeat(12, minmax(44px, 1fr));
@@ -313,12 +362,22 @@ main {
   overflow-x: auto;
 }
 
+.heatmap-day {
+  grid-template-columns: 72px repeat(24, minmax(42px, 1fr));
+}
+
+.heatmap-month {
+  grid-template-columns: 92px minmax(96px, 160px);
+  width: min(100%, 300px);
+}
+
 .heatmap-row {
   display: contents;
 }
 
 .heatmap-label,
-.heatmap-cell {
+.heatmap-cell,
+.heatmap-empty {
   min-height: 34px;
   border-radius: 7px;
   display: flex;
@@ -332,10 +391,31 @@ main {
   color: var(--muted);
   background: #eef2f7;
   font-weight: 700;
+  border: 0;
 }
 
 .heatmap-cell {
+  border: 2px solid transparent;
   font-weight: 700;
+}
+
+.heatmap-row-button {
+  cursor: pointer;
+}
+
+.heatmap-row-button:hover,
+.heatmap-cell:hover {
+  outline: 2px solid #91c8ff;
+  outline-offset: 1px;
+}
+
+.heatmap-cell.selected {
+  border-color: #0b5cad;
+  box-shadow: 0 0 0 2px #d7ebff;
+}
+
+.heatmap-empty {
+  background: #f3f5f8;
 }
 
 .tone-low {
@@ -365,6 +445,25 @@ main {
   border-radius: 8px;
   background: #f0f7ff;
   color: #184466;
+  font-size: 13px;
+}
+
+.tile-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tile-detail strong {
+  color: var(--ink);
   font-size: 13px;
 }
 
@@ -400,6 +499,12 @@ main {
 
 .recommendation-list {
   display: grid;
+  gap: 12px;
+}
+
+.recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -477,11 +582,45 @@ dd {
   background: #fbfcff;
 }
 
+.what-if-panel {
+  display: grid;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfcff;
+}
+
+.what-if-panel h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.what-if-panel p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.what-if-panel label {
+  display: grid;
+  gap: 5px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 @media (max-width: 1120px) {
   .filters-panel,
   .kpi-grid,
   .workspace-grid,
-  .inventory-summary {
+  .inventory-summary,
+  .heatmap-planner-grid,
+  .recommendation-grid,
+  .form-grid {
     grid-template-columns: 1fr;
   }
 
