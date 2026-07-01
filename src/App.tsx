@@ -48,6 +48,14 @@ const dateRanges: Array<{ value: DateRange; label: string }> = [
   { value: 'last-quarter', label: 'Last quarter' },
 ];
 const weekdayHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const tenantTimezone = 'America/New_York';
+const tenantTimezoneLabel = 'America/New_York (Eastern Time)';
+const dayPeriods = [
+  { label: '00:00-05:59', hours: hours24.slice(0, 6) },
+  { label: '06:00-11:59', hours: hours24.slice(6, 12) },
+  { label: '12:00-17:59', hours: hours24.slice(12, 18) },
+  { label: '18:00-23:59', hours: hours24.slice(18, 24) },
+];
 
 const defaultScenario: WhatIfScenario = {
   solutionName: 'New Finance Automation',
@@ -87,6 +95,7 @@ function formatDate(date: string, style: 'short' | 'long' = 'short') {
     month: 'short',
     day: 'numeric',
     year: style === 'long' ? 'numeric' : undefined,
+    timeZone: tenantTimezone,
   }).format(value);
 }
 
@@ -139,6 +148,26 @@ function peakBucketForDate(date: string, buckets: RuntimeBucket[]) {
   return dayBuckets.reduce((peak, bucket) =>
     utilizationPercent(bucket) > utilizationPercent(peak) ? bucket : peak,
   );
+}
+
+function utilizationSummaryForDate(date: string, buckets: RuntimeBucket[]) {
+  const dayBuckets = buckets.filter((bucket) => bucket.date === date);
+  if (!dayBuckets.length) return null;
+
+  const peak = peakBucketForDate(date, buckets);
+  const average = Math.round(
+    dayBuckets.reduce((sum, bucket) => sum + utilizationPercent(bucket), 0) / dayBuckets.length,
+  );
+  const lowCapacityHours = dayBuckets.filter((bucket) => utilizationPercent(bucket) < 60).length;
+  const riskHours = dayBuckets.filter((bucket) => utilizationPercent(bucket) >= 85).length;
+
+  return {
+    average,
+    lowCapacityHours,
+    peak,
+    peakPercent: peak ? utilizationPercent(peak) : 0,
+    riskHours,
+  };
 }
 
 export function App() {
@@ -204,6 +233,11 @@ export function App() {
     event.preventDefault();
     setSubmittedScenario(scenarioForm);
     selectTile({ date: scenarioForm.preferredDate, hour: scenarioForm.preferredHour }, 'day');
+  }
+
+  function resetScenario() {
+    setScenarioForm(defaultScenario);
+    setSubmittedScenario(null);
   }
 
   return (
@@ -293,7 +327,7 @@ export function App() {
               <PanelHeader
                 icon={<CalendarClock size={18} />}
                 title="Runtime Heatmap"
-                subtitle="Date-based observed utilization. Month days and hourly cells are clickable for drilldown."
+                subtitle={`Date-based observed utilization. Tenant timezone: ${tenantTimezoneLabel}.`}
               />
               <div className="heatmap-planner-grid">
                 <div>
@@ -327,10 +361,17 @@ export function App() {
                       selectedDate={selectedDate}
                       onDateClick={(date, hour) => selectTile({ date, hour }, 'day')}
                     />
-                  ) : (
-                    <HourlyHeatmap
+                  ) : grain === 'week' ? (
+                    <WeekCapacityView
                       buckets={heatmapBuckets}
-                      dates={grain === 'day' ? [selectedDate] : weekDates}
+                      dates={weekDates}
+                      selectedDate={selectedDate}
+                      onDateClick={(date, hour) => selectTile({ date, hour }, 'day')}
+                    />
+                  ) : (
+                    <DayTimeline
+                      buckets={heatmapBuckets}
+                      date={selectedDate}
                       selectedTile={selectedTile}
                       onTileClick={(tile) => selectTile(tile)}
                     />
@@ -352,6 +393,7 @@ export function App() {
                 <WhatIfPlanner
                   scenario={scenarioForm}
                   onChange={setScenarioForm}
+                  onReset={resetScenario}
                   onSubmit={submitScenario}
                 />
               </div>
@@ -562,34 +604,29 @@ function SegmentedControl<T extends string>({
   );
 }
 
-function HourlyHeatmap({
+function DayTimeline({
   buckets,
-  dates,
+  date,
   selectedTile,
   onTileClick,
 }: {
   buckets: RuntimeBucket[];
-  dates: string[];
+  date: string;
   selectedTile: SelectedTile;
   onTileClick: (tile: SelectedTile) => void;
 }) {
   return (
-    <div className="hourly-heatmap-wrap">
-      <div className="hourly-heatmap" aria-label="Hourly runtime utilization heatmap">
-        <div className="heatmap-label date-label">Date</div>
-        {hours24.map((hour) => (
-          <div className="heatmap-label hour-label" key={hour}>{hour}</div>
-        ))}
-        {dates.map((date) => (
-          <div className="heatmap-row" key={date}>
-            <button
-              className="heatmap-label heatmap-row-button date-label"
-              onClick={() => onTileClick({ date, hour: '00' })}
-              type="button"
-            >
-              <span>{formatDate(date)}</span>
-            </button>
-            {hours24.map((hour) => {
+    <div className="day-timeline" aria-label="Day runtime utilization timeline">
+      <div className="day-title">
+        <strong>{formatDate(date, 'long')}</strong>
+        <span>24 hourly buckets, shown in tenant timezone</span>
+      </div>
+      <div className="day-period-grid">
+        {dayPeriods.map((period) => (
+          <section className="day-period" key={period.label}>
+            <div className="period-label">{period.label}</div>
+            <div className="period-hours">
+              {period.hours.map((hour) => {
               const bucket = bucketFor(date, hour, buckets);
               if (!bucket) return <div className="heatmap-empty" key={`${date}-${hour}`} />;
 
@@ -598,19 +635,67 @@ function HourlyHeatmap({
               const isSelected = selectedTile.date === bucket.date && selectedTile.hour === bucket.hour;
               return (
                 <button
-                  className={`heatmap-cell ${riskTone(risk)} ${isSelected ? 'selected' : ''}`}
+                  className={`hour-card ${riskTone(risk)} ${isSelected ? 'selected' : ''}`}
                   key={`${bucket.date}-${bucket.hour}`}
                   onClick={() => onTileClick({ date: bucket.date, hour: bucket.hour })}
                   title={`${formatDate(bucket.date)} ${bucket.hour}:00 - ${percent}% - ${bucket.topDrivers.join(', ')}`}
                   type="button"
                 >
-                  {percent}
+                  <span>{hour}:00</span>
+                  <strong>{percent}%</strong>
+                  <small>{bucket.projectedDemand}/{bucket.capacity}</small>
                 </button>
               );
-            })}
-          </div>
+              })}
+            </div>
+          </section>
         ))}
       </div>
+    </div>
+  );
+}
+
+function WeekCapacityView({
+  buckets,
+  dates,
+  selectedDate,
+  onDateClick,
+}: {
+  buckets: RuntimeBucket[];
+  dates: string[];
+  selectedDate: string;
+  onDateClick: (date: string, hour: string) => void;
+}) {
+  return (
+    <div className="week-capacity" aria-label="Weekly runtime capacity summary">
+      {dates.map((date) => {
+        const summary = utilizationSummaryForDate(date, buckets);
+        const peak = summary?.peak;
+        const percent = summary?.peakPercent ?? 0;
+        const risk = peak ? riskFromPercent(percent) : 'low';
+        const capacitySignal = summary
+          ? summary.riskHours > 0
+            ? `${summary.riskHours} constrained hour(s)`
+            : `${summary.lowCapacityHours} lower-demand hour(s)`
+          : 'No signal';
+
+        return (
+          <button
+            className={`week-day-card ${peak ? riskTone(risk) : 'no-signal'} ${selectedDate === date ? 'selected' : ''}`}
+            key={date}
+            onClick={() => onDateClick(date, peak?.hour ?? '00')}
+            type="button"
+          >
+            <span>{formatDate(date).split(',')[0]}</span>
+            <strong>{formatDate(date).replace(',', '')}</strong>
+            <div className="week-meter" aria-hidden="true">
+              <i style={{ width: `${Math.min(percent, 130)}%` }} />
+            </div>
+            <small>Peak {percent}% at {peak?.hour ?? '00'}:00</small>
+            <small>Avg {summary?.average ?? 0}% - {capacitySignal}</small>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -667,10 +752,12 @@ function MonthCalendar({
 function WhatIfPlanner({
   scenario,
   onChange,
+  onReset,
   onSubmit,
 }: {
   scenario: WhatIfScenario;
   onChange: (scenario: WhatIfScenario) => void;
+  onReset: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
@@ -756,7 +843,10 @@ function WhatIfPlanner({
           <option>Critical</option>
         </select>
       </label>
-      <button className="button primary" type="submit">Submit scenario</button>
+      <div className="form-actions">
+        <button className="button primary" type="submit">Submit scenario</button>
+        <button className="button secondary" type="button" onClick={onReset}>Reset</button>
+      </div>
     </form>
   );
 }
