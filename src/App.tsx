@@ -3,7 +3,6 @@ import {
   BarChart3,
   CalendarClock,
   CheckCircle2,
-  ChevronDown,
   Clock3,
   Cpu,
   LogIn,
@@ -12,9 +11,10 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { folders, machineTemplates, runtimeBuckets, scheduleRisks, tenants } from './data/demoData';
 import {
+  filterBucketsByTemplate,
   filterRisks,
   groupRiskByFolder,
   peakDemand,
@@ -24,10 +24,29 @@ import {
   utilizationPercent,
 } from './lib/analytics';
 import { buildRecommendations } from './lib/recommendations';
-import type { RiskLevel, RiskView, TimeGrain } from './types';
+import type { DateRange, Recommendation, RiskLevel, RiskView, RuntimeBucket, TimeGrain, WhatIfScenario } from './types';
 
-const grains: TimeGrain[] = ['day', 'week', 'month', 'year'];
+const grains: TimeGrain[] = ['day', 'week', 'month'];
 const riskViews: RiskView[] = ['folder', 'process', 'job', 'sla'];
+const dateRanges: Array<{ value: DateRange; label: string }> = [
+  { value: 'last-day', label: 'Last day' },
+  { value: 'last-week', label: 'Last week' },
+  { value: 'last-month', label: 'Last month' },
+  { value: 'last-quarter', label: 'Last quarter' },
+];
+const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+const hours24 = Array.from({ length: 24 }, (_, hour) => hour.toString().padStart(2, '0'));
+
+const defaultScenario: WhatIfScenario = {
+  solutionName: 'New Finance Automation',
+  folder: 'Finance',
+  machineTemplateId: 'mt-prod-windows',
+  preferredDay: 'Tue',
+  preferredHour: '08',
+  runtimeDemand: 2,
+  durationMinutes: 75,
+  priority: 'High',
+};
 
 function riskLabel(risk: RiskLevel) {
   return {
@@ -49,23 +68,125 @@ function formatRecommendationType(type: string) {
     .join(' ');
 }
 
+function hourlyDemandFor(day: string, hour: string, buckets: RuntimeBucket[]) {
+  const hourNumber = Number(hour);
+  const baseHour = (Math.floor(hourNumber / 2) * 2).toString().padStart(2, '0');
+  const baseBucket = buckets.find((bucket) => bucket.day === day && bucket.hour === baseHour);
+  if (!baseBucket) return null;
+
+  const adjustment = hourNumber % 2 === 0 ? 0 : -1;
+  return {
+    ...baseBucket,
+    hour,
+    observedDemand: Math.max(0, baseBucket.observedDemand + adjustment),
+    projectedDemand: Math.max(0, baseBucket.projectedDemand + adjustment),
+  };
+}
+
+function applyScenarioImpact(buckets: RuntimeBucket[], scenario: WhatIfScenario | null) {
+  if (!scenario) return buckets;
+
+  const impactedHours = Math.max(1, Math.ceil(scenario.durationMinutes / 60));
+  const startHour = Number(scenario.preferredHour);
+
+  return buckets.map((bucket) => {
+    if (bucket.day !== scenario.preferredDay) return bucket;
+    if (scenario.machineTemplateId !== bucket.machineTemplateId) return bucket;
+
+    const bucketHour = Number(bucket.hour);
+    const isImpacted = bucketHour >= startHour && bucketHour < startHour + impactedHours;
+    if (!isImpacted) return bucket;
+
+    return {
+      ...bucket,
+      projectedDemand: bucket.projectedDemand + scenario.runtimeDemand,
+      topDrivers: [scenario.solutionName, ...bucket.topDrivers],
+    };
+  });
+}
+
+function buildGrainBuckets(grain: TimeGrain, buckets: RuntimeBucket[], selectedDay: string) {
+  if (grain === 'day') {
+    return hours24
+      .map((hour) => hourlyDemandFor(selectedDay, hour, buckets))
+      .filter((bucket): bucket is RuntimeBucket => Boolean(bucket));
+  }
+
+  if (grain === 'month') {
+    return days.map((day) => {
+      const dayBuckets = buckets.filter((bucket) => bucket.day === day);
+      const peak = dayBuckets.reduce((max, bucket) => Math.max(max, utilizationPercent(bucket)), 0);
+      const sample = dayBuckets[0];
+      return {
+        ...sample,
+        day: `Month ${day}`,
+        hour: 'Peak',
+        observedDemand: Math.round((peak / 100) * (sample?.capacity ?? 18)),
+        projectedDemand: Math.round((peak / 100) * (sample?.capacity ?? 18)),
+        capacity: sample?.capacity ?? 18,
+        topDrivers: dayBuckets.flatMap((bucket) => bucket.topDrivers).slice(0, 3),
+      };
+    });
+  }
+
+  return buckets;
+}
+
 export function App() {
   const [signedIn, setSignedIn] = useState(true);
   const [tenant, setTenant] = useState(tenants[0]);
   const [folder, setFolder] = useState(folders[0]);
+  const [dateRange, setDateRange] = useState<DateRange>('last-week');
+  const [machineTemplateId, setMachineTemplateId] = useState('all');
   const [grain, setGrain] = useState<TimeGrain>('week');
   const [riskView, setRiskView] = useState<RiskView>('folder');
+  const [selectedDay, setSelectedDay] = useState('Tue');
+  const [selectedTile, setSelectedTile] = useState<{ day: string; hour: string } | null>({ day: 'Tue', hour: '08' });
+  const [scenarioForm, setScenarioForm] = useState<WhatIfScenario>(defaultScenario);
+  const [submittedScenario, setSubmittedScenario] = useState<WhatIfScenario | null>(defaultScenario);
 
   const visibleRisks = useMemo(() => filterRisks(scheduleRisks, folder), [folder]);
-  const recommendations = useMemo(
-    () => buildRecommendations(visibleRisks, machineTemplates),
-    [visibleRisks],
+  const filteredBaseBuckets = useMemo(
+    () => filterBucketsByTemplate(runtimeBuckets, machineTemplateId),
+    [machineTemplateId],
   );
+  const projectedBuckets = useMemo(
+    () => applyScenarioImpact(filteredBaseBuckets, submittedScenario),
+    [filteredBaseBuckets, submittedScenario],
+  );
+  const heatmapBuckets = useMemo(
+    () => buildGrainBuckets(grain, projectedBuckets, selectedDay),
+    [grain, projectedBuckets, selectedDay],
+  );
+  const recommendations = useMemo(() => {
+    const base = buildRecommendations(visibleRisks, machineTemplates);
+    if (!submittedScenario) return base;
+
+    const scenarioRec: Recommendation = {
+      id: 'what-if-impact',
+      type: 'move-schedule',
+      owner: 'Release Manager',
+      title: `${submittedScenario.solutionName} changes ${submittedScenario.preferredDay} ${submittedScenario.preferredHour}:00 demand`,
+      impact: `Adds ${submittedScenario.runtimeDemand} runtime(s) for about ${submittedScenario.durationMinutes} minutes. Review the highlighted heatmap tiles before choosing this slot.`,
+      confidence: 'Medium',
+      basis: 'Fixture-backed what-if overlay using current machine template filter and submitted scenario',
+    };
+    return [scenarioRec, ...base];
+  }, [submittedScenario, visibleRisks]);
   const configuredRuntimes = totalConfiguredRuntimes(machineTemplates);
   const effectiveRuntimes = totalEffectiveRuntimes(machineTemplates);
-  const projectedPeakDemand = peakDemand(runtimeBuckets);
-  const riskWindows = runtimeBuckets.filter((bucket) => utilizationPercent(bucket) >= 85).length;
+  const projectedPeakDemand = peakDemand(projectedBuckets);
+  const riskWindows = projectedBuckets.filter((bucket) => utilizationPercent(bucket) >= 85).length;
   const folderRiskRows = groupRiskByFolder(visibleRisks);
+  const selectedBucket = selectedTile ? hourlyDemandFor(selectedTile.day, selectedTile.hour, projectedBuckets) : null;
+
+  function submitScenario(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmittedScenario(scenarioForm);
+    setSelectedDay(scenarioForm.preferredDay);
+    setSelectedTile({ day: scenarioForm.preferredDay, hour: scenarioForm.preferredHour });
+    setGrain('day');
+  }
 
   return (
     <div className="app-shell">
@@ -83,7 +204,7 @@ export function App() {
         <div className="topbar-actions">
           <div className="session-chip">
             <ShieldCheck size={16} />
-            {signedIn ? `Signed in · ${tenant}` : 'Demo mode'}
+            {signedIn ? `Signed in - ${tenant}` : 'Demo mode'}
           </div>
           <button className="button secondary" type="button" onClick={() => setSignedIn((value) => !value)}>
             {signedIn ? <LogOut size={16} /> : <LogIn size={16} />}
@@ -111,53 +232,115 @@ export function App() {
             </select>
           </label>
           <label>
-            <span>Runtime Type</span>
-            <select defaultValue="Unattended">
-              <option>Unattended</option>
-              <option>NonProduction</option>
-              <option>Serverless</option>
+            <span>Machine Template</span>
+            <select value={machineTemplateId} onChange={(event) => setMachineTemplateId(event.target.value)}>
+              <option value="all">All templates</option>
+              {machineTemplates.map((template) => (
+                <option key={template.id} value={template.id}>{template.name}</option>
+              ))}
             </select>
           </label>
           <label>
             <span>Date Range</span>
-            <select defaultValue="30+14">
-              <option value="30+14">Last 30 days + next 14 days</option>
-              <option value="90+30">Last 90 days + next 30 days</option>
-              <option value="year">Year trend</option>
+            <select value={dateRange} onChange={(event) => setDateRange(event.target.value as DateRange)}>
+              {dateRanges.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
             </select>
           </label>
           <div className="access-note">
             <CheckCircle2 size={16} />
-            Values are retrieved from the signed-in user's permitted tenants and folders.
+            Filters are permission-scoped. Future impact is shown only through the what-if scenario overlay.
           </div>
         </section>
 
         <section className="kpi-grid" aria-label="Capacity summary">
-          <MetricCard label="Configured Runtimes" value={configuredRuntimes} detail="Across 3 machine templates" icon={<Cpu />} />
+          <MetricCard label="Configured Runtimes" value={configuredRuntimes} detail="Across machine templates" icon={<Cpu />} />
           <MetricCard label="Effective Capacity" value={effectiveRuntimes} detail="After disconnected hosts" icon={<Server />} />
-          <MetricCard label="Projected Peak Demand" value={projectedPeakDemand} detail="Friday 18:00-19:00" icon={<Clock3 />} />
+          <MetricCard label="Projected Peak Demand" value={projectedPeakDemand} detail="Includes what-if overlay" icon={<Clock3 />} />
           <MetricCard label="Risk Windows" value={riskWindows} detail="Buckets at or above 85%" icon={<AlertTriangle />} tone="warn" />
         </section>
 
-        <section className="workspace-grid">
+        <section className="workspace-grid single-column">
           <div className="main-column">
             <section className="panel">
               <PanelHeader
                 icon={<CalendarClock size={18} />}
                 title="Runtime Heatmap"
-                subtitle="Observed and projected utilization by selected time grain"
+                subtitle="Click a tile to inspect detail. Switch to Day for 24-hour drilldown."
               />
-              <SegmentedControl
-                items={grains}
-                value={grain}
-                onChange={setGrain}
-                labelFormatter={(item) => item.charAt(0).toUpperCase() + item.slice(1)}
+              <div className="heatmap-planner-grid">
+                <div>
+                  <SegmentedControl
+                    items={grains}
+                    value={grain}
+                    onChange={setGrain}
+                    labelFormatter={(item) => item.charAt(0).toUpperCase() + item.slice(1)}
+                  />
+                  {grain === 'day' ? (
+                    <label className="inline-filter">
+                      <span>Focus day</span>
+                      <select value={selectedDay} onChange={(event) => setSelectedDay(event.target.value)}>
+                        {days.map((day) => (
+                          <option key={day}>{day}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  <Heatmap
+                    buckets={heatmapBuckets}
+                    grain={grain}
+                    selectedTile={selectedTile}
+                    onTileClick={(tile) => {
+                      setSelectedTile(tile);
+                      if (grain !== 'day') setSelectedDay(tile.day.replace('Month ', ''));
+                    }}
+                  />
+                  {selectedBucket ? (
+                    <div className="tile-detail">
+                      <strong>{selectedTile?.day} {selectedTile?.hour}:00 detail</strong>
+                      <span>{utilizationPercent(selectedBucket)}% utilization</span>
+                      <span>Observed {selectedBucket.observedDemand} / projected {selectedBucket.projectedDemand} / capacity {selectedBucket.capacity}</span>
+                      <span>Drivers: {selectedBucket.topDrivers.join(', ')}</span>
+                    </div>
+                  ) : null}
+                </div>
+                <WhatIfPlanner
+                  scenario={scenarioForm}
+                  onChange={setScenarioForm}
+                  onSubmit={submitScenario}
+                />
+              </div>
+            </section>
+
+            <section className="panel">
+              <PanelHeader
+                icon={<Sparkles size={18} />}
+                title="Dynamic Observations and Recommendations"
+                subtitle="Updated after filters and what-if scenario submission"
               />
-              <Heatmap />
-              <p className="panel-note">
-                Year view should use aggregated daily or weekly buckets. Pulling raw job detail for a full year can be
-                heavy for large tenants, so cache or persistence is recommended after the MVP.
-              </p>
+              <div className="recommendation-grid">
+                {recommendations.map((recommendation) => (
+                  <article className="recommendation-card" key={recommendation.id}>
+                    <div className="rec-header">
+                      <span className="rec-type">{formatRecommendationType(recommendation.type)}</span>
+                      <span className="confidence">{recommendation.confidence}</span>
+                    </div>
+                    <h3>{recommendation.title}</h3>
+                    <p>{recommendation.impact}</p>
+                    <dl>
+                      <div>
+                        <dt>Owner</dt>
+                        <dd>{recommendation.owner}</dd>
+                      </div>
+                      <div>
+                        <dt>Basis</dt>
+                        <dd>{recommendation.basis}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                ))}
+              </div>
             </section>
 
             <section className="panel">
@@ -267,68 +450,6 @@ export function App() {
               </table>
             </section>
           </div>
-
-          <aside className="side-column">
-            <section className="panel">
-              <PanelHeader
-                icon={<Sparkles size={18} />}
-                title="Dynamic Recommendations"
-                subtitle="Generated from current filters and fixture data"
-              />
-              <div className="recommendation-list">
-                {recommendations.map((recommendation) => (
-                  <article className="recommendation-card" key={recommendation.id}>
-                    <div className="rec-header">
-                      <span className="rec-type">{formatRecommendationType(recommendation.type)}</span>
-                      <span className="confidence">{recommendation.confidence}</span>
-                    </div>
-                    <h3>{recommendation.title}</h3>
-                    <p>{recommendation.impact}</p>
-                    <dl>
-                      <div>
-                        <dt>Owner</dt>
-                        <dd>{recommendation.owner}</dd>
-                      </div>
-                      <div>
-                        <dt>Basis</dt>
-                        <dd>{recommendation.basis}</dd>
-                      </div>
-                    </dl>
-                  </article>
-                ))}
-              </div>
-            </section>
-
-            <section className="panel">
-              <PanelHeader
-                icon={<ChevronDown size={18} />}
-                title="What-If Scenario"
-                subtitle="Proposed automation placement"
-              />
-              <div className="scenario-card">
-                <div>
-                  <span>Folder</span>
-                  <strong>Finance</strong>
-                </div>
-                <div>
-                  <span>Duration</span>
-                  <strong>75 min p90</strong>
-                </div>
-                <div>
-                  <span>Priority</span>
-                  <strong>High</strong>
-                </div>
-                <div>
-                  <span>Blackout</span>
-                  <strong>Month-end 18:00-22:00</strong>
-                </div>
-                <div>
-                  <span>Safe Slots</span>
-                  <strong>02:30 · 13:15 · Sat 06:00</strong>
-                </div>
-              </div>
-            </section>
-          </aside>
         </section>
       </main>
     </div>
@@ -397,32 +518,154 @@ function SegmentedControl<T extends string>({
   );
 }
 
-function Heatmap() {
-  const hours = ['00', '02', '04', '06', '08', '10', '12', '14', '16', '18', '20', '22'];
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+function Heatmap({
+  buckets,
+  grain,
+  selectedTile,
+  onTileClick,
+}: {
+  buckets: RuntimeBucket[];
+  grain: TimeGrain;
+  selectedTile: { day: string; hour: string } | null;
+  onTileClick: (tile: { day: string; hour: string }) => void;
+}) {
+  const columns = grain === 'day' ? hours24 : grain === 'month' ? ['Peak'] : ['00', '02', '04', '06', '08', '10', '12', '14', '16', '18', '20', '22'];
+  const rowLabels = grain === 'day' ? [buckets[0]?.day ?? 'Day'] : grain === 'month' ? days.map((day) => `Month ${day}`) : days;
+
   return (
-    <div className="heatmap" aria-label="Runtime utilization heatmap">
-      <div className="heatmap-label">Day</div>
-      {hours.map((hour) => (
-        <div className="heatmap-label" key={hour}>{hour}</div>
+    <div className={`heatmap heatmap-${grain}`} aria-label="Runtime utilization heatmap">
+      <div className="heatmap-label">{grain === 'day' ? 'Hour' : 'Day'}</div>
+      {columns.map((column) => (
+        <div className="heatmap-label" key={column}>{column}</div>
       ))}
-      {days.map((day) => (
-        <div className="heatmap-row" key={day}>
-          <div className="heatmap-label">{day}</div>
-          {runtimeBuckets
-            .filter((bucket) => bucket.day === day)
-            .map((bucket) => {
-              const percent = utilizationPercent(bucket);
-              const risk = riskFromPercent(percent);
-              return (
-                <div className={`heatmap-cell ${riskTone(risk)}`} key={`${bucket.day}-${bucket.hour}`} title={`${bucket.topDrivers.join(', ')} · ${percent}%`}>
-                  {percent}%
-                </div>
-              );
-            })}
+      {rowLabels.map((rowLabel) => (
+        <div className="heatmap-row" key={rowLabel}>
+          <button
+            className="heatmap-label heatmap-row-button"
+            onClick={() => onTileClick({ day: rowLabel.replace('Month ', ''), hour: '00' })}
+            type="button"
+          >
+            {rowLabel}
+          </button>
+          {columns.map((column) => {
+            const bucket =
+              grain === 'day'
+                ? buckets.find((item) => item.hour === column)
+                : buckets.find((item) => item.day === rowLabel && item.hour === column);
+            if (!bucket) return <div className="heatmap-empty" key={`${rowLabel}-${column}`} />;
+
+            const percent = utilizationPercent(bucket);
+            const risk = riskFromPercent(percent);
+            const isSelected = selectedTile?.day === bucket.day.replace('Month ', '') && selectedTile.hour === bucket.hour;
+            return (
+              <button
+                className={`heatmap-cell ${riskTone(risk)} ${isSelected ? 'selected' : ''}`}
+                key={`${bucket.day}-${bucket.hour}`}
+                onClick={() => onTileClick({ day: bucket.day.replace('Month ', ''), hour: bucket.hour === 'Peak' ? '00' : bucket.hour })}
+                title={`${bucket.topDrivers.join(', ')} - ${percent}%`}
+                type="button"
+              >
+                {percent}%
+              </button>
+            );
+          })}
         </div>
       ))}
     </div>
+  );
+}
+
+function WhatIfPlanner({
+  scenario,
+  onChange,
+  onSubmit,
+}: {
+  scenario: WhatIfScenario;
+  onChange: (scenario: WhatIfScenario) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form className="what-if-panel" onSubmit={onSubmit}>
+      <div>
+        <h3>To-be-deployed solution</h3>
+        <p>Submit to overlay projected runtime demand on the heatmap.</p>
+      </div>
+      <label>
+        <span>Solution name</span>
+        <input
+          value={scenario.solutionName}
+          onChange={(event) => onChange({ ...scenario, solutionName: event.target.value })}
+        />
+      </label>
+      <label>
+        <span>Folder</span>
+        <select value={scenario.folder} onChange={(event) => onChange({ ...scenario, folder: event.target.value })}>
+          {folders.filter((item) => item !== 'All permitted folders').map((item) => (
+            <option key={item}>{item}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Machine template</span>
+        <select
+          value={scenario.machineTemplateId}
+          onChange={(event) => onChange({ ...scenario, machineTemplateId: event.target.value })}
+        >
+          {machineTemplates.map((template) => (
+            <option key={template.id} value={template.id}>{template.name}</option>
+          ))}
+        </select>
+      </label>
+      <div className="form-grid">
+        <label>
+          <span>Day</span>
+          <select value={scenario.preferredDay} onChange={(event) => onChange({ ...scenario, preferredDay: event.target.value })}>
+            {days.map((day) => (
+              <option key={day}>{day}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Start hour</span>
+          <select value={scenario.preferredHour} onChange={(event) => onChange({ ...scenario, preferredHour: event.target.value })}>
+            {hours24.map((hour) => (
+              <option key={hour} value={hour}>{hour}:00</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="form-grid">
+        <label>
+          <span>Runtime demand</span>
+          <input
+            min={1}
+            max={20}
+            type="number"
+            value={scenario.runtimeDemand}
+            onChange={(event) => onChange({ ...scenario, runtimeDemand: Number(event.target.value) })}
+          />
+        </label>
+        <label>
+          <span>Duration minutes</span>
+          <input
+            min={15}
+            step={15}
+            type="number"
+            value={scenario.durationMinutes}
+            onChange={(event) => onChange({ ...scenario, durationMinutes: Number(event.target.value) })}
+          />
+        </label>
+      </div>
+      <label>
+        <span>Priority</span>
+        <select value={scenario.priority} onChange={(event) => onChange({ ...scenario, priority: event.target.value as WhatIfScenario['priority'] })}>
+          <option>Normal</option>
+          <option>High</option>
+          <option>Critical</option>
+        </select>
+      </label>
+      <button className="button primary" type="submit">Submit scenario</button>
+    </form>
   );
 }
 
