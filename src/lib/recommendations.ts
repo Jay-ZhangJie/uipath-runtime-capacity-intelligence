@@ -1,11 +1,7 @@
-import type { MachineTemplate, Recommendation, ScheduleRisk } from '../types';
+import type { Recommendation, ScheduleRisk } from '../types';
 
-export function buildRecommendations(risks: ScheduleRisk[], templates: MachineTemplate[]): Recommendation[] {
+export function buildRecommendations(risks: ScheduleRisk[]): Recommendation[] {
   const recommendations: Recommendation[] = [];
-  const disconnectedSlots = templates.reduce(
-    (sum, template) => sum + Math.max(0, template.configuredRuntimes - template.effectiveRuntimes),
-    0,
-  );
   const criticalRisk = risks.find((risk) => risk.risk === 'critical');
   const financeRisk = risks.find((risk) => risk.folder === 'Finance' && risk.projectedLateMinutes > 0);
 
@@ -29,19 +25,7 @@ export function buildRecommendations(risks: ScheduleRisk[], templates: MachineTe
       title: `Add ${Math.max(2, criticalRisk.runtimeDemand - criticalRisk.availableCapacity + 1)} unattended runtimes if ${criticalRisk.nextRun} is fixed`,
       impact: 'Protects critical period under p95 duration and keeps one runtime as buffer.',
       confidence: 'Medium',
-      basis: 'Projected peak demand exceeds effective capacity during blackout-sensitive window',
-    });
-  }
-
-  if (disconnectedSlots > 0) {
-    recommendations.push({
-      id: 'restore-host-capacity',
-      type: 'restore-capacity',
-      owner: 'Admin',
-      title: `Restore ${disconnectedSlots} unavailable runtime slots`,
-      impact: 'Raises effective capacity before purchasing additional licenses.',
-      confidence: 'High',
-      basis: 'Machine template inventory shows configured runtimes above effective runtime count',
+      basis: 'Projected peak demand exceeds planning capacity during blackout-sensitive window',
     });
   }
 
