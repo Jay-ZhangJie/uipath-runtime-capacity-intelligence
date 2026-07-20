@@ -1,0 +1,6 @@
+{
+  "appType": "Web",
+  "name": "Runtime Capacity Intelligence",
+  "description": "Read-only UiPath runtime capacity, schedule risk, SLA, and recommendation dashboard.",
+  "scopes": "OR.Execution.Read OR.Folders.Read OR.Jobs.Read OR.License.Read OR.Machines.Read OR.Robots.Read OR.Settings.Read OR.Users.Read"
+}
