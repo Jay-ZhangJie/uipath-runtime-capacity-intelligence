@@ -6,6 +6,12 @@ export type DateRange = 'last-day' | 'last-week' | 'last-month' | 'last-quarter'
 
 export type RiskView = 'folder' | 'process' | 'job' | 'sla';
 
+export interface SelectedTile {
+  date: string;
+  hour: string;
+  minute?: string;
+}
+
 export interface RuntimeBucket {
   date: string;
   weekday: string;
@@ -17,15 +23,27 @@ export interface RuntimeBucket {
   topDrivers: string[];
 }
 
+export interface TenantLicenseSummary {
+  runtimeAllocated: number | null;
+  runtimeUsed: number | null;
+  source: 'orchestrator-license-info' | 'tenant-allocation-api' | 'unavailable';
+  label: string;
+  productCode: string;
+  message: string;
+}
+
 export interface MachineTemplate {
   id: string;
   name: string;
+  machineType: string;
   folders: string[];
-  configuredRuntimes: number;
-  effectiveRuntimes: number;
+  hostNames?: string[];
+  templateRuntimeSlots: number;
+  connectedMachines: number;
+  configuredMaxCapacity: number;
   onlineHosts: number;
   totalHosts: number;
-  runtimeType: 'Unattended' | 'NonProduction' | 'Serverless';
+  runtimeType: 'Unattended' | 'NonProduction' | 'Testing' | 'Serverless';
 }
 
 export interface ScheduleRisk {
@@ -46,7 +64,7 @@ export interface ScheduleRisk {
 export interface Recommendation {
   id: string;
   title: string;
-  type: 'move-schedule' | 'add-runtime' | 'restore-capacity' | 'split-workload' | 'change-window';
+  type: 'move-schedule' | 'add-runtime' | 'split-workload' | 'change-window';
   owner: 'Business Owner' | 'COE' | 'Admin' | 'Release Manager';
   impact: string;
   confidence: 'Low' | 'Medium' | 'High';
@@ -55,11 +73,11 @@ export interface Recommendation {
 
 export interface WhatIfScenario {
   solutionName: string;
+  businessDetails: string;
   folder: string;
   machineTemplateId: string;
   preferredDate: string;
   preferredHour: string;
   runtimeDemand: number;
   durationMinutes: number;
-  priority: 'Normal' | 'High' | 'Critical';
 }

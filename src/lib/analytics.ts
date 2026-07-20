@@ -11,12 +11,18 @@ export function riskFromPercent(percent: number): RiskLevel {
   return 'low';
 }
 
-export function totalConfiguredRuntimes(templates: MachineTemplate[]) {
-  return templates.reduce((sum, item) => sum + item.configuredRuntimes, 0);
+export function totalConfiguredMaxCapacity(templates: MachineTemplate[]) {
+  return templates.reduce((sum, item) => sum + item.configuredMaxCapacity, 0);
 }
 
-export function totalEffectiveRuntimes(templates: MachineTemplate[]) {
-  return templates.reduce((sum, item) => sum + item.effectiveRuntimes, 0);
+export function totalTemplateRuntimeSlots(templates: MachineTemplate[]) {
+  return templates.reduce((sum, item) => sum + item.templateRuntimeSlots, 0);
+}
+
+export function totalConnectedMachines(templates: MachineTemplate[]) {
+  const hostNames = templates.flatMap((item) => item.hostNames ?? []);
+  if (hostNames.length) return new Set(hostNames.map((item) => item.trim().toLowerCase()).filter(Boolean)).size;
+  return templates.reduce((sum, item) => sum + item.connectedMachines, 0);
 }
 
 export function peakDemand(buckets: RuntimeBucket[]) {
